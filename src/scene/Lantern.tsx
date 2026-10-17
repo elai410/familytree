@@ -3,24 +3,27 @@ import { useFrame } from '@react-three/fiber'
 import { Billboard, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Person } from '../data/family'
-import type { Vec3 } from '../data/graph'
+import { lanternScale, type Vec3 } from '../data/graph'
 import { useTree } from '../state'
+import { personPosition } from './morph'
 
-// ── Shared resources (built once for every lantern) ─────────────────────────
+// ── Shared resources (built once for every node) ────────────────────────────
+// A glowing orb that only hints at a lantern: faint ribs and two thin gold rings.
+const POLE = 0.88
+const STRETCH = 1.08
 const bodyGeometry = (() => {
   const pts: THREE.Vector2[] = []
-  for (let i = 0; i <= 24; i++) {
-    const y = -1 + (2 * i) / 24
-    pts.push(new THREE.Vector2(0.42 + 0.66 * Math.cos((y * Math.PI) / 2), y * 1.05))
+  for (let i = 0; i <= 32; i++) {
+    const y = -POLE + (2 * POLE * i) / 32
+    pts.push(new THREE.Vector2(Math.sqrt(1 - y * y), y * STRETCH))
   }
-  return new THREE.LatheGeometry(pts, 28)
+  return new THREE.LatheGeometry(pts, 40)
 })()
 
-const capGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.18, 20)
-const tasselGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6)
-const beadGeometry = new THREE.SphereGeometry(0.1, 10, 10)
-const haloGeometry = new THREE.TorusGeometry(1.75, 0.035, 8, 64)
-const hitGeometry = new THREE.SphereGeometry(1.5, 8, 8)
+const RING_R = Math.sqrt(1 - POLE * POLE)
+const ringGeometry = new THREE.TorusGeometry(RING_R, 0.06, 8, 32)
+const haloGeometry = new THREE.TorusGeometry(1.45, 0.03, 8, 64)
+const hitGeometry = new THREE.SphereGeometry(1.3, 8, 8)
 
 const paperTexture = (() => {
   const c = document.createElement('canvas')
@@ -28,13 +31,13 @@ const paperTexture = (() => {
   c.height = 128
   const g = c.getContext('2d')!
   const grad = g.createLinearGradient(0, 0, 0, 128)
-  grad.addColorStop(0, '#5a1d12')
+  grad.addColorStop(0, '#b0604a')
   grad.addColorStop(0.5, '#ffffff')
-  grad.addColorStop(1, '#5a1d12')
+  grad.addColorStop(1, '#b0604a')
   g.fillStyle = grad
   g.fillRect(0, 0, 256, 128)
-  g.fillStyle = 'rgba(40,6,4,0.55)'
-  for (let i = 0; i < 12; i++) g.fillRect((i * 256) / 12, 0, 3, 128)
+  g.fillStyle = 'rgba(60,10,6,0.18)'
+  for (let i = 0; i < 8; i++) g.fillRect((i * 256) / 8, 0, 2, 128)
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   return t
@@ -55,6 +58,7 @@ export const FONT = '/fonts/label.woff'
 
 interface Props {
   person: Person
+  /** Family-tree position (the front face). */
   position: Vec3
   core: boolean
   /** null = nothing selected, so everyone is lit. */
@@ -78,7 +82,7 @@ export function Lantern({ person, position, core, active }: Props) {
       new THREE.MeshStandardMaterial({
         map: paperTexture,
         emissiveMap: paperTexture,
-        color: ph ? '#4a4150' : '#d3301f',
+        color: ph ? '#4a4150' : '#e0452c',
         emissive: ph ? '#7a5a4a' : core ? '#ff7a2e' : '#ff4f24',
         emissiveIntensity: ph ? 0.25 : 1.6,
         roughness: 0.85,
@@ -89,25 +93,26 @@ export function Lantern({ person, position, core, active }: Props) {
   )
   const gold = useMemo(() => goldMaterial.clone(), [])
 
-  const baseScale = core ? 1.55 : ph ? 1 : 1.25
+  const baseScale = lanternScale(person.id)
 
   useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime
     const k = 1 - Math.exp(-dt * 6)
-    body.current.position.y = Math.sin(t * 0.8 + phase) * 0.25
-    body.current.rotation.z = Math.sin(t * 0.6 + phase) * 0.05
+    personPosition(person.id, group.current.position)
+    body.current.position.y = Math.sin(t * 0.8 + phase) * 0.08
+    body.current.rotation.y = t * 0.15 + phase
 
     const lit = active !== false
     const boost = hovered || selected ? 1.6 : 1
     const targetGlow = (ph ? 0.25 : 1.6) * (lit ? boost : 0.12) * (0.92 + 0.08 * Math.sin(t * 3 + phase))
-    const targetOpacity = lit ? (ph ? 0.6 : 1) : 0.14
+    const targetOpacity = (lit ? (ph ? 0.6 : 1) : 0.14)
     paper.emissiveIntensity += (targetGlow - paper.emissiveIntensity) * k
     paper.opacity += (targetOpacity - paper.opacity) * k
     gold.opacity = paper.opacity
     const s = baseScale * (hovered || selected ? 1.18 : 1)
     group.current.scale.setScalar(group.current.scale.x + (s - group.current.scale.x) * k)
     if (label.current) {
-      const lo = lit ? (ph ? 0.5 : 1) : 0.05
+      const lo = (lit ? (ph ? 0.5 : 1) : 0.05)
       label.current.fillOpacity += (lo - label.current.fillOpacity) * k
       label.current.outlineOpacity = label.current.fillOpacity
     }
@@ -132,15 +137,13 @@ export function Lantern({ person, position, core, active }: Props) {
         }}
       >
         <mesh geometry={bodyGeometry} material={paper} />
-        <mesh geometry={capGeometry} material={gold} position={[0, 1.12, 0]} />
-        <mesh geometry={capGeometry} material={gold} position={[0, -1.12, 0]} />
-        <mesh geometry={tasselGeometry} material={gold} position={[0, -1.65, 0]} />
-        <mesh geometry={beadGeometry} material={gold} position={[0, -2.12, 0]} />
+        <mesh geometry={ringGeometry} material={gold} position={[0, POLE * STRETCH, 0]} rotation={[Math.PI / 2, 0, 0]} />
+        <mesh geometry={ringGeometry} material={gold} position={[0, -POLE * STRETCH, 0]} rotation={[Math.PI / 2, 0, 0]} />
         {core && <CoreHalo active={active !== false} />}
         <mesh geometry={hitGeometry} material={hitMaterial} />
       </group>
       <Suspense fallback={null}>
-        <Billboard position={[0, -2.6, 0]}>
+        <Billboard position={[0, -1.6, 0]}>
           <Text
             ref={label}
             font={FONT}

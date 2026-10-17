@@ -4,7 +4,6 @@ import {
   coreSet,
   people,
   personById,
-  traitLinks,
   TRAIT_STYLE,
   unitById,
   units,
@@ -18,6 +17,8 @@ import { useTree } from '../state'
 export function Overlay() {
   const selected = useTree((s) => s.selected)
   const select = useTree((s) => s.select)
+  const side = useTree((s) => s.side)
+  const flip = useTree((s) => s.flip)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -53,7 +54,16 @@ export function Overlay() {
             ← See the whole family
           </button>
         ) : (
-          <p className="hint">Drag to orbit · scroll to zoom · click a glowing ring to visit a household</p>
+          <>
+            <button className="flip glass" onClick={flip}>
+              <span aria-hidden="true">↻</span> {side === 'front' ? 'Turn to connections' : 'Turn to family tree'}
+            </button>
+            <p className="hint">
+              {side === 'front'
+                ? 'Drag to turn it around · the back shows clubs and hometowns'
+                : 'Clubs and hometowns · drag back around for the family tree'}
+            </p>
+          </>
         )}
       </div>
     </div>
@@ -174,45 +184,27 @@ function Details() {
 
   const p = personById.get(selected.id)!
   const roles = unitsOf.get(p.id) ?? []
-  const links = traitLinks.filter((l) => l.a === p.id || l.b === p.id)
-  const byKind = (Object.keys(TRAIT_STYLE) as TraitKind[])
-    .map((kind) => ({
-      kind,
-      groups: Object.entries(
-        links
-          .filter((l) => l.kind === kind)
-          .reduce<Record<string, string[]>>((acc, l) => {
-            ;(acc[l.value] ??= []).push(l.a === p.id ? l.b : l.a)
-            return acc
-          }, {}),
-      ),
-    }))
-    .filter((k) => k.groups.length)
-
-  const facts: [string, string | undefined][] = [
-    ['Hometown', p.hometown],
-    ['Clubs', p.clubs?.join(', ')],
-    ['Hobbies', p.hobbies?.join(', ')],
-  ]
-
   return (
     <aside className="details glass">
-      <p className="eyebrow">{coreSet.has(p.id) ? '✦ One of the core four' : 'Family member'}</p>
+      <p className="eyebrow">{coreSet.has(p.id) ? '✦ Coparent' : 'Family member'}</p>
       <h2>{p.name}</h2>
-      {p.note && <p className="note">{p.note}</p>}
 
-      {facts.some(([, v]) => v) && (
-        <dl className="facts">
-          {facts.map(([k, v]) =>
-            v ? (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ) : null,
+      {(p.classYear || p.hometown) && (
+        <div className="meta">
+          {p.classYear && <p className="class-year">{p.classYear}</p>}
+          {p.hometown && (
+            <p className="hometown">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" />
+                <circle cx="12" cy="9.5" r="2.5" />
+              </svg>
+              {p.hometown}
+            </p>
           )}
-        </dl>
+        </div>
       )}
+      {p.bio && <p className="bio">{p.bio}</p>}
+      {!p.classYear && !p.hometown && !p.bio && <p className="muted">No details yet</p>}
 
       <h4>Households</h4>
       <ul className="roles">
@@ -226,21 +218,6 @@ function Details() {
         ))}
       </ul>
 
-      {byKind.map(({ kind, groups }) => (
-        <div key={kind}>
-          <h4 style={{ color: TRAIT_STYLE[kind].color }}>Shared {TRAIT_STYLE[kind].label.toLowerCase()}</h4>
-          {groups.map(([value, ids]) => (
-            <div key={value} className="shared">
-              <span className="muted">{value}</span>
-              <div className="chips">
-                {ids.map((id) => (
-                  <PersonChip key={id} id={id} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
     </aside>
   )
 }

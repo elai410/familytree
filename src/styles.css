@@ -75,7 +75,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
 .details h2 { margin: 6px 0 4px; font-family: var(--serif); font-size: 34px; font-weight: 600; line-height: 1.05; }
 .details h4 { margin: 18px 0 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
-.note { color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+.meta { display: grid; gap: 6px; margin: 10px 0 2px; }
+.class-year { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
+.hometown { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink); }
+.hometown svg { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--red); stroke-width: 2; }
+.bio { margin: 12px 0 0; color: var(--ink-soft); font-size: 15px; line-height: 1.55; }
+.details .muted { margin: 10px 0 0; }
 .muted { color: var(--ink-faint); font-size: 13px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -85,14 +90,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .chip:hover { background: rgba(224, 54, 42, 0.35); transform: translateY(-1px); }
 .chip.ghost { opacity: 0.5; border-style: dashed; cursor: default; }
 .chip .star { color: var(--gold); margin-right: 5px; }
-.facts { margin: 14px 0 0; display: grid; gap: 8px; }
-.facts div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
-.facts dt { color: var(--ink-faint); }
-.facts dd { margin: 0; text-align: right; }
 .roles { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .roles button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 10px; font-size: 14px; }
 .roles button:hover { background: rgba(255, 190, 120, 0.1); }
-.shared { margin-bottom: 10px; display: grid; gap: 6px; }
 
 /* Legend */
 .legend { position: absolute; left: 24px; bottom: 22px; padding: 12px 14px; display: grid; gap: 10px; font-size: 12px; }
@@ -107,11 +107,14 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .toggle.on .dash { opacity: 1; }
 
 /* Footer */
-.footer { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.footer { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); pointer-events: none; display: grid; justify-items: center; gap: 8px; }
 .footer > * { pointer-events: auto; }
 .hint { margin: 0; font-size: 12px; color: var(--ink-faint); letter-spacing: 0.04em; white-space: nowrap; pointer-events: none; }
 .back { padding: 10px 18px; border-radius: 999px; font-size: 14px; color: var(--ink); }
 .back:hover { border-color: rgba(242, 181, 68, 0.6); }
+.flip { padding: 10px 18px; border-radius: 999px; font-size: 14px; color: var(--ink); display: inline-flex; gap: 8px; align-items: center; }
+.flip span { color: var(--gold); font-size: 16px; }
+.flip:hover { border-color: rgba(242, 181, 68, 0.6); }
 
 /* Household hover tip (rendered in 3D space) */
 .hub-tip {
@@ -135,7 +138,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .legend { left: 16px; right: 16px; bottom: 16px; padding: 10px 12px; }
   .legend .row:first-child { display: none; }
   .footer { bottom: auto; top: 70px; left: auto; right: 16px; transform: none; }
-  .back { padding: 8px 14px; font-size: 13px; }
+  .back, .flip { padding: 8px 14px; font-size: 13px; }
   .hint { display: none; }
   .details ~ .legend { display: none; }
 }

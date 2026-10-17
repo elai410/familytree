@@ -3,75 +3,85 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import * as THREE from 'three'
-import { activeSetFor, allBounds, boundsOf, coreSet, people, positions, units, type Vec3 } from '../data/graph'
-import { useTree } from '../state'
+import { activeSetFor, allBounds, backPositions, connectionSetFor, coreSet, flat, people, positions, units, type Vec3 } from '../data/graph'
+import { useTree, type Side } from '../state'
 import { Ambient } from './Ambient'
+import { Connections } from './Connections'
 import { Household } from './Household'
 import { Lantern } from './Lantern'
+import { morph, releaseTo, updateOverall } from './morph'
 import { TraitThreads } from './TraitThreads'
 
-/** Candidate viewing directions, roughly evenly spread over a sphere. */
-const DIRECTIONS = Array.from({ length: 48 }, (_, i) => {
-  const y = 1 - (2 * (i + 0.5)) / 48
-  const r = Math.sqrt(1 - y * y)
-  const a = i * 2.39996
-  return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r)
-})
+/** Look at the tree from slightly above. */
+const LIFT = 0.14
+const PANEL_PX = 340 // width the details panel covers on desktop
+const SWAY = 0.12
 
-/**
- * Pick the angle that spreads the focused people out the most on screen,
- * looking in from outside the ball so the rest of the family sits behind them.
- */
-function bestDirection(ids: Set<string>, center: Vec3, current: THREE.Vector3) {
-  const pts = [...ids].map((id) => positions.get(id)).filter((p): p is Vec3 => !!p).map((p) => new THREE.Vector3(...p))
-  const outward = new THREE.Vector3(...center).sub(new THREE.Vector3(...allBounds.center))
-  const hasOutward = outward.length() > allBounds.radius * 0.2
-  outward.normalize()
-  let best = current.clone().normalize()
-  let bestScore = -Infinity
-  const proj = pts.map(() => new THREE.Vector3())
-  for (const d of DIRECTIONS) {
-    if (hasOutward && d.dot(outward) < 0.15) continue
-    pts.forEach((p, i) => proj[i].copy(p).projectOnPlane(d))
-    let minGap = Infinity
-    for (let i = 0; i < proj.length; i++)
-      for (let j = i + 1; j < proj.length; j++) minGap = Math.min(minGap, proj[i].distanceTo(proj[j]))
-    // Prefer slightly-above views and staying close to where the camera already is.
-    const score = Math.min(minGap, 8) + d.y * 1.5 + d.dot(current) * 1.0
-    if (score > bestScore) {
-      bestScore = score
-      best = d
-    }
+/** The camera angle that faces a side, picked to be the nearest turn from where it is now. */
+function azimuthFor(side: Side, from: number) {
+  const base = side === 'front' ? 0 : Math.PI
+  return base + Math.round((from - base) / (Math.PI * 2)) * Math.PI * 2
+}
+
+/** Bounds of some ids on one face (labels hang below, so the bottom gets a little extra). */
+function boxOn(face: Map<string, Vec3>, ids: Iterable<string>, pad: number) {
+  const pts = [...ids].map((id) => face.get(id)).filter((p): p is Vec3 => !!p)
+  if (!pts.length) return { cx: 0, cy: 0, w: 40, h: 40 }
+  const xs = pts.map((p) => p[0])
+  const ys = pts.map((p) => p[1])
+  const minY = Math.min(...ys) - 3
+  const maxY = Math.max(...ys) + 2
+  return {
+    cx: (Math.min(...xs) + Math.max(...xs)) / 2,
+    cy: (minY + maxY) / 2,
+    w: Math.max(...xs) - Math.min(...xs) + pad * 2,
+    h: maxY - minY + pad * 2,
   }
-  return best
 }
 
 function CameraRig() {
   const controls = useRef<CameraControls>(null!)
   const selected = useTree((s) => s.selected)
   const hovered = useTree((s) => s.hovered)
+  const flips = useTree((s) => s.flips)
+  const lastFlips = useRef(flips)
   const lastInteraction = useRef(-10)
   const { camera, size } = useThree()
 
   useEffect(() => {
     const c = controls.current
     if (!c) return
-    if (!selected) {
-      c.fitToSphere(new THREE.Sphere(new THREE.Vector3(...allBounds.center), allBounds.radius), true)
-      return
-    }
-    const ids = activeSetFor(selected)!
-    const b = boundsOf(ids, 7)
-    const radius = selected.kind === 'person' ? Math.max(b.radius * 0.8, 14) : b.radius
+    const current = useTree.getState().side
+    // A flip turns to the other face; a household always lives on the front.
+    const flipping = flips !== lastFlips.current
+    lastFlips.current = flips
+    const side: Side = flipping ? (current === 'front' ? 'back' : 'front') : selected?.kind === 'unit' ? 'front' : current
+    const face = side === 'front' ? positions : backPositions
+
+    const ids = !selected ? [...face.keys()] : side === 'back' && selected.kind === 'person' ? connectionSetFor(selected.id) : activeSetFor(selected)!
+    const box = boxOn(face, ids, selected ? 9 : 6)
+
     const cam = camera as THREE.PerspectiveCamera
-    const current = cam.position.clone().sub(c.getTarget(new THREE.Vector3()))
-    const dir = bestDirection(ids, b.center, current.normalize())
-    const vFov = THREE.MathUtils.degToRad(cam.fov)
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (size.width / size.height))
-    const dist = radius / Math.sin(Math.min(vFov, hFov) / 2)
-    const [x, y, z] = b.center
-    c.setLookAt(x + dir.x * dist, y + dir.y * dist, z + dir.z * dist, x, y, z, true)
-  }, [selected, camera, size])
+    const desktop = size.width > 760
+    // Leave room for the details panel: on the right on desktop, along the bottom on phones.
+    const usableW = selected && desktop ? Math.max(0.4, (size.width - PANEL_PX) / size.width) : 1
+    // Keep clear of the header and legend; on phones the card also takes the bottom ~45%.
+    const [topFrac, bottomFrac] = desktop ? [0.13, 0.07] : selected ? [0.15, 0.45] : [0.14, 0.1]
+    const usableH = 1 - topFrac - bottomFrac
+    const vHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)
+    const hHalf = vHalf * (size.width / size.height)
+    const dist = Math.max(box.h / 2 / (vHalf * usableH), box.w / 2 / (hHalf * usableW), 12)
+
+    const az = azimuthFor(side, c.azimuthAngle)
+    const dir = new THREE.Vector3(Math.sin(az), LIFT, Math.cos(az)).normalize()
+    c.setLookAt(box.cx + dir.x * dist, box.cy + dir.y * dist, dir.z * dist, box.cx, box.cy, 0, true)
+    c.setFocalOffset(
+      ((1 - usableW) / 2) * 2 * hHalf * dist,
+      ((bottomFrac - topFrac) / 2) * 2 * vHalf * dist,
+      0,
+      true,
+    )
+  }, [selected, camera, size, flips])
 
   useEffect(() => {
     const c = controls.current
@@ -84,17 +94,46 @@ function CameraRig() {
     }
   }, [])
 
-  useFrame((_, dt) => {
-    const idle = performance.now() / 1000 - lastInteraction.current > 4
-    if (idle && !selected && !hovered) controls.current.rotate(dt * 0.06, 0, false)
+  useFrame(({ clock }, dt) => {
+    const c = controls.current
+    // Turning past the side releases the lanterns toward the other face. A little
+    // hysteresis means small orbits near the side don't send them back and forth.
+    morph.now = clock.elapsedTime
+    const turn = (1 - Math.cos(c.azimuthAngle)) / 2
+    const was = useTree.getState().side
+    const side: Side = was === 'front' ? (turn > 0.58 ? 'back' : 'front') : turn < 0.42 ? 'front' : 'back'
+    if (side !== was) useTree.getState().setSide(side)
+    releaseTo(side === 'back' ? 1 : 0)
+    updateOverall()
+
+    // When nobody is touching it, sway gently on whichever side you're on.
+    const idle = performance.now() / 1000 - lastInteraction.current > 5
+    if (!idle || selected || hovered || c.active) return
+    const target = azimuthFor(side, c.azimuthAngle) + Math.sin(clock.elapsedTime * 0.1) * SWAY
+    c.rotate((target - c.azimuthAngle) * Math.min(1, dt * 0.6), 0, false)
   })
 
-  return <CameraControls ref={controls} makeDefault minDistance={6} maxDistance={260} smoothTime={0.7} dollySpeed={0.6} />
+  return (
+    <CameraControls
+      ref={controls}
+      makeDefault
+      minDistance={6}
+      maxDistance={320}
+      smoothTime={0.7}
+      dollySpeed={0.6}
+      minPolarAngle={0.35}
+      maxPolarAngle={Math.PI - 0.35}
+    />
+  )
 }
 
 function Tree() {
   const selected = useTree((s) => s.selected)
-  const activeSet = useMemo(() => activeSetFor(selected), [selected])
+  const side = useTree((s) => s.side)
+  const activeSet = useMemo(
+    () => (selected?.kind === 'person' && side === 'back' ? connectionSetFor(selected.id) : activeSetFor(selected)),
+    [selected, side],
+  )
 
   return (
     <>
@@ -111,6 +150,7 @@ function Tree() {
         />
       ))}
       <TraitThreads activeSet={activeSet} />
+      <Connections activeSet={activeSet} />
     </>
   )
 }
@@ -118,8 +158,10 @@ function Tree() {
 export function Scene() {
   const select = useTree((s) => s.select)
   const start = useMemo(() => {
-    const d = allBounds.radius * 2.6
-    return [allBounds.center[0], allBounds.center[1] + d * 0.25, allBounds.center[2] + d] as [number, number, number]
+    const ys = [...flat.values()].map((p) => p[1])
+    const y = (Math.min(...ys) + Math.max(...ys)) / 2
+    const d = allBounds.radius * 3
+    return [0, y + d * 0.3, d] as [number, number, number]
   }, [])
 
   return (
