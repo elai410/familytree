@@ -116,6 +116,19 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .flip span { color: var(--gold); font-size: 16px; }
 .flip:hover { border-color: rgba(242, 181, 68, 0.6); }
 
+/* Dashboard */
+.dashboard {
+  position: fixed; inset: 0; overflow-y: auto; display: grid; place-items: center; padding: 120px 24px 40px;
+  background: radial-gradient(ellipse at 50% 30%, #1a1036 0%, #05061a 70%);
+}
+.family-list { list-style: none; margin: 0; padding: 0; width: min(760px, 100%); display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.family-card { width: 100%; text-align: left; padding: 22px 22px 18px; display: grid; gap: 6px; animation: rise 0.35s ease-out; transition: border-color 0.15s, transform 0.15s; }
+.family-card:hover { border-color: rgba(242, 181, 68, 0.6); transform: translateY(-2px); }
+.family-card h2 { margin: 0; font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1.05; }
+.family-card small { color: var(--ink-faint); font-size: 13px; }
+.families { position: absolute; top: 22px; right: 24px; padding: 9px 16px; border-radius: 999px; font-size: 13px; }
+.families:hover { border-color: rgba(242, 181, 68, 0.6); }
+
 /* Household hover tip (rendered in 3D space) */
 .hub-tip {
   display: grid; gap: 2px; padding: 8px 12px; border-radius: 10px; white-space: nowrap; text-align: center;
@@ -132,6 +145,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .brand h1 { font-size: 24px; }
   .seal { width: 42px; height: 42px; font-size: 24px; }
   .menu-toggle { top: 70px; left: 16px; padding: 8px 14px; }
+  .families { top: 16px; right: 16px; padding: 8px 14px; }
+  .dashboard { padding: 96px 16px 32px; }
   .directory { top: 116px; left: 16px; right: 16px; width: auto; max-height: 58%; }
   .directory.open { z-index: 5; }
   .details { top: auto; bottom: 76px; left: 16px; right: 16px; width: auto; max-height: 46%; }

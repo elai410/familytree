@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { TraitKind } from './data/graph'
+import { setFamily, type TraitKind } from './data/graph'
+import { resetMorph } from './scene/morph'
 
 export type Selection = { kind: 'unit' | 'person'; id: string } | null
 export type Side = 'front' | 'back'
@@ -17,6 +18,9 @@ interface TreeState {
   toggleTrait: (k: TraitKind) => void
   setSide: (s: Side) => void
   flip: () => void
+  /** Which family is open, or null for the dashboard. */
+  familyId: string | null
+  openFamily: (id: string | null) => void
 }
 
 export const useTree = create<TreeState>((set) => ({
@@ -30,4 +34,13 @@ export const useTree = create<TreeState>((set) => ({
   toggleTrait: (k) => set((s) => ({ traits: { ...s.traits, [k]: !s.traits[k] } })),
   setSide: (side) => set({ side }),
   flip: () => set((s) => ({ flips: s.flips + 1, selected: null })),
+  familyId: null,
+  openFamily: (familyId) => {
+    // Swap the graph before the tree renders for the new family.
+    if (familyId) {
+      setFamily(familyId)
+      resetMorph()
+    }
+    set({ familyId, selected: null, hovered: null, side: 'front' })
+  },
 }))

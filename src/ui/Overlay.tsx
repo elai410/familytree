@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { SUBTITLE, TITLE } from '../data/family'
 import {
   coreSet,
+  family,
   people,
   personById,
   TRAIT_STYLE,
@@ -19,6 +19,7 @@ export function Overlay() {
   const select = useTree((s) => s.select)
   const side = useTree((s) => s.side)
   const flip = useTree((s) => s.flip)
+  const openFamily = useTree((s) => s.openFamily)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -32,9 +33,9 @@ export function Overlay() {
       <header className="brand">
         <div className="seal" aria-hidden="true">家</div>
         <div>
-          <h1>{TITLE}</h1>
+          <h1>{family.title}</h1>
           <p>
-            {SUBTITLE} · {people.filter((p) => !p.placeholder).length} members · {units.length} households
+            {family.subtitle} · {people.filter((p) => !p.placeholder).length} members · {units.length} households
           </p>
         </div>
       </header>
@@ -44,7 +45,13 @@ export function Overlay() {
       </button>
       <Directory open={menuOpen} onPick={() => window.matchMedia('(max-width: 760px)').matches && setMenuOpen(false)} />
 
-      {selected && <Details key={selected.id} />}
+      {selected ? (
+        <Details key={selected.id} />
+      ) : (
+        <button className="families glass" onClick={() => openFamily(null)}>
+          ← Families
+        </button>
+      )}
 
       <Legend />
 
@@ -65,6 +72,7 @@ export function Overlay() {
             </p>
           </>
         )}
+        <p className="hint">Arrow keys to move between lanterns · F to turn · Esc to step back</p>
       </div>
     </div>
   )

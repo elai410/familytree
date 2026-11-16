@@ -11,6 +11,7 @@ import { Household } from './Household'
 import { Lantern } from './Lantern'
 import { morph, releaseTo, updateOverall } from './morph'
 import { TraitThreads } from './TraitThreads'
+import { useArrowKeys } from './useArrowKeys'
 
 /** Look at the tree from slightly above. */
 const LIFT = 0.14
@@ -157,6 +158,7 @@ function Tree() {
 
 export function Scene() {
   const select = useTree((s) => s.select)
+  useArrowKeys()
   const start = useMemo(() => {
     const ys = [...flat.values()].map((p) => p[1])
     const y = (Math.min(...ys) + Math.max(...ys)) / 2

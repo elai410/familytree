@@ -1,4 +1,4 @@
-import { CORE, people as rawPeople, units, type Person, type Unit } from './family'
+import { families, type Family, type Person, type Unit } from './family'
 
 export type Vec3 = [number, number, number]
 export type TraitKind = 'clubs' | 'hometowns'
@@ -27,15 +27,18 @@ export function yearColor(year: number) {
 }
 
 export function unitTitle(u: Unit) {
-  return u.name ?? u.parents.map((id) => rawPeople.find((p) => p.id === id)?.name ?? id).join(' + ')
+  return u.name ?? u.parents.map((id) => personById.get(id)?.name ?? id).join(' + ')
 }
 
 // ── People ───────────────────────────────────────────────────────────────────
-export const people: Person[] = rawPeople
-export const personById = new Map(people.map((p) => [p.id, p]))
-export const unitById = new Map(units.map((u) => [u.id, u]))
-export { units }
-export const coreSet = new Set(CORE)
+// shortcut: every family-specific export is a live binding that setFamily() swaps; views
+// remount when the family changes. Upgrade to a passed-in graph object if two families ever render at once.
+export let family: Family
+export let people: Person[]
+export let personById: Map<string, Person>
+export let unitById: Map<string, Unit>
+export let units: Unit[]
+export let coreSet: Set<string>
 
 /** How big each lantern is drawn: the central coparents are larger, future kids smaller. */
 export function lanternScale(id: string) {
@@ -81,18 +84,21 @@ export function kidThreadOf(u: Unit, kid: string): Vec3[] | null {
   return wrapPath(pts)
 }
 
-for (const u of units) {
-  for (const id of [...u.parents, ...u.children]) {
-    if (!personById.has(id)) console.warn(`[family] unit "${u.id}" mentions unknown person "${id}"`)
-  }
-}
-
 /** Every unit a person belongs to, with their role in it. */
-export const unitsOf = new Map<string, { unit: Unit; role: 'parent' | 'child' }[]>()
-for (const p of people) unitsOf.set(p.id, [])
-for (const u of units) {
-  u.parents.forEach((id) => unitsOf.get(id)?.push({ unit: u, role: 'parent' }))
-  u.children.forEach((id) => unitsOf.get(id)?.push({ unit: u, role: 'child' }))
+export let unitsOf: Map<string, { unit: Unit; role: 'parent' | 'child' }[]>
+function computeUnitsOf() {
+  for (const u of units) {
+    for (const id of [...u.parents, ...u.children]) {
+      if (!personById.has(id)) console.warn(`[family] unit "${u.id}" mentions unknown person "${id}"`)
+    }
+  }
+  const unitsOf = new Map<string, { unit: Unit; role: 'parent' | 'child' }[]>()
+  for (const p of people) unitsOf.set(p.id, [])
+  for (const u of units) {
+    u.parents.forEach((id) => unitsOf.get(id)?.push({ unit: u, role: 'parent' }))
+    u.children.forEach((id) => unitsOf.get(id)?.push({ unit: u, role: 'child' }))
+  }
+  return unitsOf
 }
 
 // ── Shared-trait links ──────────────────────────────────────────────────────
@@ -101,35 +107,40 @@ function traitValues(p: Person, kind: TraitKind): string[] {
   return p[kind] ?? []
 }
 
-export const traitLinks: TraitLink[] = []
-for (const kind of Object.keys(TRAIT_STYLE) as TraitKind[]) {
-  const groups = new Map<string, string[]>()
-  for (const p of people) {
-    for (const v of traitValues(p, kind)) {
-      const key = v.trim().toLowerCase()
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(p.id)
+export let traitLinks: TraitLink[]
+function computeTraitLinks() {
+  const traitLinks: TraitLink[] = []
+  for (const kind of Object.keys(TRAIT_STYLE) as TraitKind[]) {
+    const groups = new Map<string, string[]>()
+    for (const p of people) {
+      for (const v of traitValues(p, kind)) {
+        const key = v.trim().toLowerCase()
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(p.id)
+      }
+    }
+    // One thread per pair, even if they share both a hometown and an area.
+    const seen = new Set<string>()
+    for (const [, ids] of groups) {
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++) {
+          const pair = [ids[i], ids[j]].sort().join('|')
+          if (seen.has(pair)) continue
+          seen.add(pair)
+          const value = traitValues(personById.get(ids[i])!, kind).find(
+            (v) => traitValues(personById.get(ids[j])!, kind).some((w) => w.trim().toLowerCase() === v.trim().toLowerCase()),
+          )!
+          traitLinks.push({ a: ids[i], b: ids[j], kind, value })
+        }
     }
   }
-  // One thread per pair, even if they share both a hometown and an area.
-  const seen = new Set<string>()
-  for (const [, ids] of groups) {
-    for (let i = 0; i < ids.length; i++)
-      for (let j = i + 1; j < ids.length; j++) {
-        const pair = [ids[i], ids[j]].sort().join('|')
-        if (seen.has(pair)) continue
-        seen.add(pair)
-        const value = traitValues(personById.get(ids[i])!, kind).find(
-          (v) => traitValues(personById.get(ids[j])!, kind).some((w) => w.trim().toLowerCase() === v.trim().toLowerCase()),
-        )!
-        traitLinks.push({ a: ids[i], b: ids[j], kind, value })
-      }
-  }
+  return traitLinks
 }
 
 // ── Generations (used to gently lift elders to the top of the ball) ──────────
-const generation = new Map<string, number>()
-{
+let generation: Map<string, number>
+function computeGenerations() {
+  const generation = new Map<string, number>()
   const childOf = new Set(units.flatMap((u) => u.children))
   for (let pass = 0; pass < 12; pass++) {
     for (const u of units) {
@@ -145,6 +156,7 @@ const generation = new Map<string, number>()
       u.children.forEach((id) => !generation.has(id) && generation.set(id, g! + 1))
     }
   }
+  return generation
 }
 const genOf = (id: string) => generation.get(id) ?? 0
 /** Which generation row someone sits in (0 = top of the tree). */
@@ -178,7 +190,7 @@ function isotonic(y: number[], w: number[]) {
 }
 
 /** How many smaller households sit inside this one (its line runs a little lower). */
-export const nestedRank = new Map<string, number>()
+export let nestedRank: Map<string, number>
 const lineDrop = (nested: number) => -0.9 * nested
 
 function computeLayout() {
@@ -301,7 +313,7 @@ function computeLayout() {
 }
 
 /** Every node's position in the flat tree layout (x along the row, y up). */
-export const flat = computeLayout()
+export let flat: Map<string, [number, number]>
 
 /** The flat bounds of a set of ids (labels hang below, so the bottom gets a little extra). */
 export function flatBox(ids: Iterable<string>, pad = 4) {
@@ -326,7 +338,7 @@ export function wrap(fx: number, fy: number, z = 0): Vec3 {
   return [fx, fy, z]
 }
 
-export const positions = new Map<string, Vec3>([...flat].map(([id, [fx, fy]]) => [id, wrap(fx, fy, unitById.has(id) ? 0.3 : 0)]))
+export let positions: Map<string, Vec3>
 
 function wrapPath(pts: [number, number][]): Vec3[] {
   return pts.map(([fx, fy]) => wrap(fx, fy))
@@ -343,7 +355,8 @@ export interface TraitGroup {
   members: string[]
 }
 
-export const traitGroups: TraitGroup[] = (() => {
+export let traitGroups: TraitGroup[]
+function computeTraitGroups() {
   const out: TraitGroup[] = []
   for (const kind of Object.keys(TRAIT_STYLE) as TraitKind[]) {
     const byKey = new Map<string, { label: string; members: string[] }>()
@@ -362,11 +375,12 @@ export const traitGroups: TraitGroup[] = (() => {
     }
   }
   return out
-})()
-export const groupById = new Map(traitGroups.map((g) => [g.id, g]))
+}
+export let groupById: Map<string, TraitGroup>
 
 /** Where everyone (and every connection hub) sits on the back face, in world space. */
-export const backPositions = (() => {
+export let backPositions: Map<string, Vec3>
+function computeBackPositions() {
   const connected = [...new Set(traitGroups.flatMap((g) => g.members))]
   const nodes = [...traitGroups.map((g) => g.id), ...connected]
   const p = new Map<string, [number, number]>()
@@ -448,7 +462,7 @@ export const backPositions = (() => {
   const out = new Map<string, Vec3>()
   for (const [id, [x, y]] of placed) out.set(id, [fb.cx - x, fb.cy + (y - midY), 0])
   return out
-})()
+}
 
 /** Ids lit up on the back face when a person is selected there. */
 export function connectionSetFor(id: string): Set<string> {
@@ -462,12 +476,13 @@ export function connectionSetFor(id: string): Set<string> {
 }
 
 /** 0 at the far left of the family tree, 1 at the far right; staggers the morph into a wave. */
-export const familyOrder = (() => {
+export let familyOrder: Map<string, number>
+function computeFamilyOrder() {
   const xs = people.map((p) => flat.get(p.id)![0])
   const lo = Math.min(...xs)
   const hi = Math.max(...xs)
   return new Map(people.map((p) => [p.id, hi === lo ? 0.5 : (flat.get(p.id)![0] - lo) / (hi - lo)]))
-})()
+}
 
 /** Bounding sphere (center + radius) around a set of ids. */
 export function boundsOf(ids: Iterable<string>, pad = 6): { center: Vec3; radius: number } {
@@ -480,7 +495,7 @@ export function boundsOf(ids: Iterable<string>, pad = 6): { center: Vec3; radius
   return { center: c, radius: r + pad }
 }
 
-export const allBounds = boundsOf(positions.keys(), 4)
+export let allBounds: { center: Vec3; radius: number }
 
 /** Ids lit up when something is selected. */
 export function activeSetFor(sel: { kind: 'unit' | 'person'; id: string } | null): Set<string> | null {
@@ -503,3 +518,38 @@ export function activeSetFor(sel: { kind: 'unit' | 'person'; id: string } | null
   }
   return s
 }
+
+// ── Building a family's graph ───────────────────────────────────────────────
+//  Steps run in order because later ones read the bindings earlier ones set.
+function build(f: Family) {
+  family = f
+  people = f.people
+  units = f.units
+  personById = new Map(people.map((p) => [p.id, p]))
+  unitById = new Map(units.map((u) => [u.id, u]))
+  coreSet = new Set(f.core)
+  unitsOf = computeUnitsOf()
+  traitLinks = computeTraitLinks()
+  generation = computeGenerations()
+  nestedRank = new Map()
+  flat = computeLayout()
+  positions = new Map([...flat].map(([id, [fx, fy]]) => [id, wrap(fx, fy, unitById.has(id) ? 0.3 : 0)]))
+  traitGroups = computeTraitGroups()
+  groupById = new Map(traitGroups.map((g) => [g.id, g]))
+  backPositions = computeBackPositions()
+  familyOrder = computeFamilyOrder()
+  allBounds = boundsOf(positions.keys(), 4)
+  return { family, people, units, personById, unitById, coreSet, unitsOf, traitLinks, generation, nestedRank, flat, positions, traitGroups, groupById, backPositions, familyOrder, allBounds }
+}
+
+const built = new Map<string, ReturnType<typeof build>>()
+
+/** Point every export above at one family's graph, building it the first time it's opened. */
+export function setFamily(id: string) {
+  const f = families.find((x) => x.id === id) ?? families[0]
+  const g = built.get(f.id) ?? build(f)
+  built.set(f.id, g)
+  ;({ family, people, units, personById, unitById, coreSet, unitsOf, traitLinks, generation, nestedRank, flat, positions, traitGroups, groupById, backPositions, familyOrder, allBounds } = g)
+}
+
+setFamily(families[0].id)

@@ -32,6 +32,13 @@ export const morph = {
   flights: new Map<string, Flight>(people.map((p) => [p.id, { from: 0, to: 0, startAt: 0 }])),
 }
 
+/** Start a freshly opened family with every lantern home on the front. */
+export function resetMorph() {
+  morph.target = 0
+  morph.overall = 0
+  morph.flights = new Map(people.map((p) => [p.id, { from: 0, to: 0, startAt: 0 }]))
+}
+
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 
 /** Release every lantern toward a face, top tier first, each with a little hesitation of its own. */

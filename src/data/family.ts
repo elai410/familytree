@@ -6,6 +6,9 @@
 //     and who their kids are. A person can be in as many units as they like.
 //  3. Optionally give people a class year, hometown, clubs, and a short bio.
 //     Anyone who shares a hometown, area, or club gets a faint connecting thread.
+//
+//  To add a whole new family, give it its own people + units (like the Willow
+//  family at the bottom) and add it to `families`; it shows up on the dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Person {
@@ -31,6 +34,17 @@ export interface Unit {
   name?: string
   parents: string[]
   children: string[]
+}
+
+export interface Family {
+  /** Unique, used to remember which family is open. */
+  id: string
+  title: string
+  subtitle: string
+  /** The coparents at the heart of the tree; they get a golden halo. */
+  core: string[]
+  people: Person[]
+  units: Unit[]
 }
 
 /** The coparents at the heart of the tree; they get a golden halo. */
@@ -103,4 +117,22 @@ export const units: Unit[] = [
   { id: 'u26-wilson', year: 2026, parents: ['wilson', 'noah'], children: ['wn-kid-1', 'wn-kid-2'] },
   { id: 'u26-angie', year: 2026, parents: ['angie', 'emily'], children: ['isa', 'zoe', 'emma-2'] },
   { id: 'u26-susan', year: 2026, parents: ['susan', 'susan-2'], children: [] },
+]
+
+// ── A second, smaller family ────────────────────────────────────────────────
+const willowPeople: Person[] = [
+  { id: 'mei', name: 'Mei', classYear: 'Senior', hometown: 'Seattle, Washington', clubs: ['A cappella'] },
+  { id: 'jonah', name: 'Jonah', classYear: 'Senior', hometown: 'Portland, Oregon', area: 'Pacific Northwest' },
+  { id: 'priya', name: 'Priya', classYear: 'Sophomore', hometown: 'Tacoma, Washington', area: 'Pacific Northwest', clubs: ['A cappella'] },
+  { id: 'leo', name: 'Leo', classYear: 'Sophomore', hometown: 'Austin, Texas' },
+  { id: 'sam', name: 'Sam', classYear: 'Sophomore', clubs: ['Debate'] },
+  { id: 'willow-kid-1', name: 'Future kid', placeholder: true },
+]
+
+const willowUnits: Unit[] = [{ id: 'u25-mei', year: 2025, parents: ['mei', 'jonah'], children: ['priya', 'leo', 'sam', 'willow-kid-1'] }]
+
+/** Every family on the dashboard. The first one is the original Lantern family. */
+export const families: Family[] = [
+  { id: 'lantern', title: TITLE, subtitle: SUBTITLE, core: CORE, people, units },
+  { id: 'willow', title: 'The Willow Family', subtitle: 'Sample family tree', core: ['mei', 'jonah'], people: willowPeople, units: willowUnits },
 ]
